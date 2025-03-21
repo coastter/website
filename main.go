@@ -10,9 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"time"
 )
 
+//go:embed dist
 var staticFiles embed.FS
 
 type ServerInfo struct {
@@ -53,6 +55,32 @@ func main() {
 
 		log.Printf("%s - %s %s %s", r.RemoteAddr, r.Method, r.URL.Path, r.UserAgent())
 
+		path := r.URL.Path
+		if path == "/" {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		fsys, err := fs.Sub(staticFS, ".")
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		cleanPath := strings.TrimPrefix(path, "/")
+
+		_, err = fs.Stat(fsys, cleanPath)
+		if err == nil {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		if strings.HasPrefix(path, "/api/") {
+			http.NotFound(w, r)
+			return
+		}
+
+		r.URL.Path = "/"
 		fileServer.ServeHTTP(w, r)
 	})
 
